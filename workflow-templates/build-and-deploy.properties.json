@@ -1,0 +1,8 @@
+{
+  "name": "Build and Deploy with Kaniko",
+  "description": "Build container image with Kaniko and deploy to Cerebral cluster",
+  "iconName": "docker",
+  "categories": ["Deployment", "Docker", "Kubernetes"],
+  "filePatterns": ["Dockerfile.*", "docker/**"]
+}
+

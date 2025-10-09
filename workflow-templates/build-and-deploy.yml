@@ -1,0 +1,51 @@
+name: Build and Deploy
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted]
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Build with Kaniko
+        id: build
+        uses: baerautotech/cerebral-deployment/.github/actions/build-with-kaniko@main
+        with:
+          image-name: 'cerebral/${{ github.event.repository.name }}'
+          dockerfile: 'Dockerfile'  # Adjust if needed
+          context: '.'  # Adjust if needed
+      
+      - name: Deploy to Kubernetes
+        run: |
+          # Determine namespace based on branch
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            NAMESPACE="cerebral-production"
+          else
+            NAMESPACE="cerebral-development"
+          fi
+          
+          # Update deployment with new image digest
+          kubectl set image deployment/${{ github.event.repository.name }} \
+            app=${{ steps.build.outputs.image }} \
+            -n ${NAMESPACE}
+          
+          # Wait for rollout
+          kubectl rollout status deployment/${{ github.event.repository.name }} \
+            -n ${NAMESPACE} \
+            --timeout=5m
+      
+      - name: Output summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: \`${{ steps.build.outputs.image }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Digest**: \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+
