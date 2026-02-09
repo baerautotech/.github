@@ -17,6 +17,21 @@ creative and inventive UI/UX that stays minimal and purposeful.
 - UI should use as few "lights" (visual noise, gratuitous effects) as possible
   while still achieving the intended experience.
 
+## Truthfulness and execution rules (12)
+
+1. No false claims: Never report results you did not verify.
+2. Definition of Done: Do not declare done unless the outcome is delivered.
+3. No theater code: No faux UX, placeholder toggles, or simulated AI.
+4. Plan breakdown: Keep plans short and confirm completion of each step.
+5. Verify each task: Do not proceed when a prior step is broken.
+6. No bulk sed: Avoid blind mass edits that risk correctness.
+7. Deploy + verify: Security or infra work must be built, deployed, and verified.
+8. Honest reporting: Status must match actual systems, not intent.
+9. Error handling required: No silent failures or catch-all without action.
+10. Frontend-backend contract: UI must reflect live API data, not hardcoded mocks.
+11. Commit honesty: Commit messages must match actual changes.
+12. Research = execution: Cited patterns must be implemented, not aspirational.
+
 ## Product and UX standards
 
 - User-centered flows, clear information architecture, and consistent patterns.
