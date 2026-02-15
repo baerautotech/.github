@@ -17,6 +17,70 @@ creative and inventive UI/UX that stays minimal and purposeful.
 - UI should use as few "lights" (visual noise, gratuitous effects) as possible
   while still achieving the intended experience.
 
+## Truthfulness and execution rules (12)
+
+1. No false claims: Never report results you did not verify.
+2. Definition of Done: Do not declare done unless the outcome is delivered.
+3. No theater code: No faux UX, placeholder toggles, or simulated AI.
+4. Plan breakdown: Keep plans short and confirm completion of each step.
+5. Verify each task: Do not proceed when a prior step is broken.
+6. No bulk sed: Avoid blind mass edits that risk correctness.
+7. Deploy + verify: Security or infra work must be built, deployed, and verified.
+8. Honest reporting: Status must match actual systems, not intent.
+9. Error handling required: No silent failures or catch-all without action.
+10. Frontend-backend contract: UI must reflect live API data, not hardcoded mocks.
+11. Commit honesty: Commit messages must match actual changes.
+12. Research = execution: Cited patterns must be implemented, not aspirational.
+
+## Git workflow (required)
+
+- Always work on a new branch (never commit directly to `main`).
+- Push branch → open PR → merge to `main`.
+- After merge: delete the remote branch and delete the local branch.
+- Exceptions require explicit user instruction (e.g., emergency hotfix straight to `main`).
+
+## Deployment in this repo (staging-driven)
+
+This repo uses **GitHub Actions** and protected environments. In practice,
+**deploying to staging happens by pushing to the `staging` branch**.
+
+### What triggers a staging deploy
+
+- **Services → Cloud Run**: push to `staging` with changes under `services/**`
+  triggers the **Deploy Services** workflow.
+- **Infra / workflows (Terraform / Cloud Workflows)**: push to `staging` with
+  changes under `terraform/**` or `workflows/**` triggers the
+  **Deploy Infrastructure** workflow.
+
+### How to fetch deploy evidence (required for “deployed + verified” claims)
+
+- List runs:
+  - `gh run list --branch staging --workflow "Deploy Services" --limit 5`
+  - `gh run list --branch staging --workflow "Deploy Infrastructure" --limit 5`
+- View a run summary:
+  - `gh run view <run_id>`
+- Get step-by-step logs (useful for smoke test output):
+  - `gh api /repos/<org>/<repo>/actions/runs/<run_id>/logs` (zip)
+
+Tip: this environment may inject an invalid `GITHUB_TOKEN` env var that breaks
+`gh`. Prefer:
+
+- `env -u GITHUB_TOKEN gh ...`
+
+### Common failure modes (staging)
+
+- **“Missing Cloud Run service: …”** during api-backend deploy:
+  - A required dependent service was not created/deployed yet.
+  - Fix by deploying the missing service first, or making the dependency
+    optional if appropriate for staging rollout.
+- **Private service smoke tests**:
+  - Unauthenticated `/health` should return **401/403** for private services.
+- **GitHub CLI permissions**:
+  - `git push` can work (contents write) while `gh pr create` / workflow
+    dispatch fails (missing PR/actions permissions). If `gh` returns
+    “Resource not accessible by integration”, use the GitHub UI or update the
+    token permissions.
+
 ## Product and UX standards
 
 - User-centered flows, clear information architecture, and consistent patterns.
