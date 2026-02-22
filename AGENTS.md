@@ -17,6 +17,115 @@ creative and inventive UI/UX that stays minimal and purposeful.
 - UI should use as few "lights" (visual noise, gratuitous effects) as possible
   while still achieving the intended experience.
 
+## Truthfulness and execution rules (12)
+
+1. No false claims: Never report results you did not verify.
+2. Definition of Done: Do not declare done unless the outcome is delivered.
+3. No theater code: No faux UX, placeholder toggles, or simulated AI.
+4. Plan breakdown: Keep plans short and confirm completion of each step.
+5. Verify each task: Do not proceed when a prior step is broken.
+6. No bulk sed: Avoid blind mass edits that risk correctness.
+7. Deploy + verify: Security or infra work must be built, deployed, and verified.
+8. Honest reporting: Status must match actual systems, not intent.
+9. Error handling required: No silent failures or catch-all without action.
+10. Frontend-backend contract: UI must reflect live API data, not hardcoded mocks.
+11. Commit honesty: Commit messages must match actual changes.
+12. Research = execution: Cited patterns must be implemented, not aspirational.
+
+## Decision-making rubric (time-anchored)
+
+When using phrases like "best practices", "cutting edge", or "current direction", agents must first anchor on the real current date by running `date -u` and `date` (Shell) and stating the outputs in the conversation.
+
+If multiple viable paths exist, prefer the option that best matches:
+- Compliance/control alignment (auditability, least privilege, clear ownership, operational safety)
+- Current and future platform direction (avoid dead-ends and unnecessary lock-in)
+- Reversibility and long-term operability over short-term speed
+
+If the choice depends on missing constraints (compliance target, threat model, roadmap), stop and ask rather than guessing.
+
+## Policy-pack sync awareness
+
+If a repository contains `policy-files.json`, it has opted into org policy sync (source of truth: `baerautotech/policy-pack`). Treat the listed files as policy-managed and avoid local drift; propose changes through the policy-pack workflow instead.
+
+## Git workflow (required)
+
+### Branch contract (non-negotiable)
+
+- `main` is **PRODUCTION**.
+  - Do **not** merge to `main` unless the user has explicitly issued a HIL (human-in-the-loop) instruction to do so.
+- `staging` is **QA / integration**.
+  - All day-to-day rewrite work should land in `staging` first for testing and QA.
+
+### Working model
+
+- Always work in a **worktree** (recommended: 4-track worktrees) with a dedicated branch.
+  - See: `./scripts/setup_parallel_worktrees.sh`
+- Never commit directly to `main` or `staging`.
+- Push branch → open PR → merge to **`staging`** (after all pre-checks / CI pass).
+- After merge: delete the remote branch and delete the local branch.
+  - Repo setting: ensure `delete_branch_on_merge=true` (GitHub “Automatically delete head branches”) to prevent remote branch buildup.
+  - CLI merges: prefer `gh pr merge --auto --squash --delete-branch` (or `--merge`/`--rebase` as appropriate).
+
+### Pre-checks (required before merging to staging)
+
+No overrides. Do not merge if any required check is failing.
+
+Minimum bar:
+- CI checks required by branch protection are green.
+- Relevant local linters/typechecks/tests were run for the touched stack(s) (per service/app README).
+- If a staging URL is available, run the validation harness in URL mode:
+
+  ```bash
+  ./scripts/comprehensive_validation.sh --url "<STAGING_BASE_URL>"
+  ```
+
+### Promotions (staging → main)
+
+- Only promote to `main` after staging QA is complete and the user explicitly authorizes a promotion.
+- Preferred mechanism: fast-forward `main` to `staging` (single linear history) rather than cherry-picking.
+
+## Deployment in this repo (staging-driven)
+
+This repo uses **GitHub Actions** and protected environments. In practice,
+**deploying to staging happens by pushing to the `staging` branch**.
+
+### What triggers a staging deploy
+
+- **Services → Cloud Run**: push to `staging` with changes under `services/**`
+  triggers the **Deploy Services** workflow.
+- **Infra / workflows (Terraform / Cloud Workflows)**: push to `staging` with
+  changes under `terraform/**` or `workflows/**` triggers the
+  **Deploy Infrastructure** workflow.
+
+### How to fetch deploy evidence (required for “deployed + verified” claims)
+
+- List runs:
+  - `gh run list --branch staging --workflow "Deploy Services" --limit 5`
+  - `gh run list --branch staging --workflow "Deploy Infrastructure" --limit 5`
+- View a run summary:
+  - `gh run view <run_id>`
+- Get step-by-step logs (useful for smoke test output):
+  - `gh api /repos/<org>/<repo>/actions/runs/<run_id>/logs` (zip)
+
+Tip: this environment may inject an invalid `GITHUB_TOKEN` env var that breaks
+`gh`. Prefer:
+
+- `env -u GITHUB_TOKEN gh ...`
+
+### Common failure modes (staging)
+
+- **“Missing Cloud Run service: …”** during api-backend deploy:
+  - A required dependent service was not created/deployed yet.
+  - Fix by deploying the missing service first, or making the dependency
+    optional if appropriate for staging rollout.
+- **Private service smoke tests**:
+  - Unauthenticated `/health` should return **401/403** for private services.
+- **GitHub CLI permissions**:
+  - `git push` can work (contents write) while `gh pr create` / workflow
+    dispatch fails (missing PR/actions permissions). If `gh` returns
+    “Resource not accessible by integration”, use the GitHub UI or update the
+    token permissions.
+
 ## Product and UX standards
 
 - User-centered flows, clear information architecture, and consistent patterns.
@@ -103,6 +212,22 @@ creative and inventive UI/UX that stays minimal and purposeful.
 - Threat model user inputs: validate, sanitize, and encode outputs.
 - Use least privilege for service accounts and tokens.
 
+## Custom domains and managed certificates (Cloud Run)
+
+Cloud Run custom domains use Google-managed certificates. Certificate issuance is quota-limited per top-level domain and repeated domain-mapping churn can cause multi-day custom-domain TLS outages.
+
+Non-negotiables:
+
+- Do not "retry" certificate issuance by deleting/recreating Cloud Run domain mappings.
+- Treat domain-mapping changes as production-impacting ops work; require explicit HIL approval and record the change intent.
+- Before any domain-mapping change, capture current status:
+  - `gcloud beta run domain-mappings describe --domain "<DOMAIN>" --project "<PROJECT_ID>" --region "<REGION>"`
+  - Confirm `Ready` / `CertificateProvisioned` / `reason` / `message` and whether the system is retrying.
+- If certificate issuance is rate-limited or TLS is down:
+  - Stop all domain-mapping churn immediately.
+  - Use the Cloud Run service URL (`*.a.run.app`) for development/testing where feasible.
+  - If CI is blocked solely due to custom-domain TLS, implement a clearly-labeled temporary bypass that writes an explicit `skip_reason.txt` artifact and includes a revert plan.
+
 ## Observability and reliability
 
 - Emit structured logs, metrics, and traces for all services.
@@ -166,6 +291,22 @@ creative and inventive UI/UX that stays minimal and purposeful.
 - Performance budgets: measure and avoid regressions.
 - Visual E2E is enforced in CI when UI/visual changes are detected. Tag
   screenshot tests with `@visual` and set `PW_BASE_URL` in secrets.
+
+## TDD modification hook (strict)
+
+To prevent agents from "cheating" TDD by editing tests instead of fixing app
+code, this repository enforces a TDD modification hook with hard-fail behavior.
+
+Non-negotiables:
+- Block modifications to test paths and test-named files by default.
+- Return exit code `2` on violations (blocking error).
+- Emit a clear error: "modifications to test folders are not allowed".
+- Require explicit override (`ALLOW_TDD_TEST_MODIFICATIONS=1`) for intentional
+  test edits and treat those edits as exception paths that must be justified.
+
+Enforcement points:
+- Pre-commit local hook: `scripts/tdd-modification-hook.sh --staged`
+- CI guard step: `scripts/tdd-modification-hook.sh --range <base...HEAD>`
 
 ## Tooling guardrails (Feb 2026 baseline)
 
